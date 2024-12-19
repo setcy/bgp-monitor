@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网络状态监控</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8 text-gray-800">网络状态监控</h1>
+
+        <!-- 标签页切换 -->
+        <div class="mb-6">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8">
+                    <button onclick="switchTab('wg')" class="tab-button active-tab py-4 px-1 border-b-2 font-medium text-sm" data-tab="wg">
+                        WireGuard
+                    </button>
+                    <button onclick="switchTab('bird')" class="tab-button py-4 px-1 border-b-2 font-medium text-sm" data-tab="bird">
+                        Bird2 BGP
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- WireGuard 内容 -->
+        <div id="wg-content" class="tab-content">
+            <!-- 无接口时显示 -->
+            <div id="noInterface" class="bg-white rounded-lg shadow-lg p-6 mb-6 hidden">
+                <div class="text-center py-8">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">未找到 WireGuard 接口</h3>
+                    <p class="mt-1 text-sm text-gray-500">请确保已创建并启用 WireGuard 接口。</p>
+                </div>
+            </div>
+
+            <!-- 接口列表 -->
+            <div id="interfacesList" class="space-y-8">
+                <!-- 接口信息将通过 JavaScript 动态添加 -->
+            </div>
+        </div>
+
+        <!-- Bird2 内容 -->
+        <div id="bird-content" class="tab-content hidden">
+            <!-- 命令按钮区域 -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">���令</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <button onclick="executeBirdCommand('show protocols')" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded">
+                        查看协议
+                    </button>
+                    <button onclick="executeBirdCommand('show route')" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded">
+                        查看路由
+                    </button>
+                    <button onclick="executeBirdCommand('show status')" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded">
+                        查看状态
+                    </button>
+                    <button onclick="executeBirdCommand('show memory')" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded">
+                        查看内存
+                    </button>
+                </div>
+            </div>
+
+            <!-- 结果显示区域 -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-gray-700">执行结果</h2>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="showRawOutput" class="form-checkbox h-4 w-4 text-blue-600">
+                            <label for="showRawOutput" class="text-sm text-gray-600">显示原始输出</label>
+                        </div>
+                        <span id="birdStatusIndicator" class="hidden">
+                            <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                        <button onclick="clearBirdOutput()" class="text-gray-500 hover:text-gray-700">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="birdFormattedOutput" class="mb-4"></div>
+                <div id="birdOutput" class="font-mono text-sm bg-gray-50 p-4 rounded-lg min-h-[200px] max-h-[600px] overflow-y-auto whitespace-pre hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .tab-button {
+            color: #6b7280;
+            border-color: transparent;
+        }
+        .tab-button:hover {
+            color: #374151;
+            border-color: #d1d5db;
+        }
+        .active-tab {
+            border-color: #3b82f6;
+            color: #2563eb;
+        }
+    </style>
+
+    <script>
+        // WireGuard 相关函数
+        function formatBytes(bytes) {
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            if (bytes === 0) return '0 B';
+            const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+            return Math.round(bytes / Math.pow(1024, i), 2) + ' ' + sizes[i];
+        }
+
+        async function loadInterfaces() {
+            try {
+                const response = await fetch('/interfaces');
+                const interfaces = await response.json();
+                
+                if (interfaces.length === 0) {
+                    document.getElementById('noInterface').classList.remove('hidden');
+                    document.getElementById('interfacesList').innerHTML = '';
+                    return;
+                }
+
+                document.getElementById('noInterface').classList.add('hidden');
+                const interfacesList = document.getElementById('interfacesList');
+                interfacesList.innerHTML = '';
+
+                // 获取每个接口的状态
+                for (const iface of interfaces) {
+                    try {
+                        const statusResponse = await fetch(`/status?interface=${iface}`);
+                        const status = await statusResponse.json();
+                        
+                        // 创建接口卡片
+                        const interfaceCard = document.createElement('div');
+                        interfaceCard.className = 'space-y-6';
+                        
+                        // 接口基本信息
+                        const infoCard = document.createElement('div');
+                        infoCard.className = 'bg-white rounded-lg shadow-lg p-6';
+                        infoCard.innerHTML = `
+                            <h2 class="text-xl font-semibold mb-4 text-gray-700">接口：${status.name}</h2>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p class="text-gray-600">公钥：<span class="font-medium text-gray-800">${status.public_key}</span></p>
+                                </div>
+                                <div>
+                                    <p class="text-gray-600">监听端口：<span class="font-medium text-gray-800">${status.listen_port}</span></p>
+                                </div>
+                            </div>
+                        `;
+                        interfaceCard.appendChild(infoCard);
+
+                        // 对等点信息
+                        if (status.peers && status.peers.length > 0) {
+                            const peersCard = document.createElement('div');
+                            peersCard.className = 'bg-white rounded-lg shadow-lg p-6';
+                            peersCard.innerHTML = `
+                                <h3 class="text-lg font-semibold mb-4 text-gray-700">对等点列表</h3>
+                                <div class="space-y-4">
+                                    ${status.peers.map(peer => `
+                                        <div class="bg-gray-50 rounded-lg p-4">
+                                            <div class="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <p class="text-gray-600">公钥：<span class="font-medium text-gray-800">${peer.public_key}</span></p>
+                                                    <p class="text-gray-600">终端点：<span class="font-medium text-gray-800">${peer.endpoint || '未连接'}</span></p>
+                                                    <p class="text-gray-600">最后握手：<span class="font-medium text-gray-800">${peer.last_handshake_time}</span></p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-gray-600">传输：<span class="font-medium text-gray-800">↑${formatBytes(peer.transmit_bytes)} ↓${formatBytes(peer.receive_bytes)}</span></p>
+                                                    <p class="text-gray-600">允许的 IP：<span class="font-medium text-gray-800">${peer.allowed_ips.join(', ') || '无'}</span></p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `;
+                            interfaceCard.appendChild(peersCard);
+                        } else {
+                            const noPeersCard = document.createElement('div');
+                            noPeersCard.className = 'bg-white rounded-lg shadow-lg p-6';
+                            noPeersCard.innerHTML = `
+                                <div class="text-center py-4">
+                                    <p class="text-gray-500">当前接口没有对等点连接</p>
+                                </div>
+                            `;
+                            interfaceCard.appendChild(noPeersCard);
+                        }
+
+                        interfacesList.appendChild(interfaceCard);
+                    } catch (error) {
+                        console.error(`获取接口 ${iface} 状态失败:`, error);
+                    }
+                }
+            } catch (error) {
+                console.error('加载接口列表失败:', error);
+                document.getElementById('noInterface').classList.remove('hidden');
+                document.getElementById('interfacesList').innerHTML = '';
+            }
+        }
+
+        // Bird2 相关函数
+        let isBirdExecuting = false;
+        let lastBirdCommand = '';
+        let lastBirdData = null;
+
+        function renderBirdProtocols(protocols) {
+            return `
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">协议</th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">更新时间</th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">信息</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${protocols.map(p => `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${p.name}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${p.protocol}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                            ${p.state_class === 'success' ? 'bg-green-100 text-green-800' : 
+                                            p.state_class === 'error' ? 'bg-red-100 text-red-800' : 
+                                            p.state_class === 'warning' ? 'bg-yellow-100 text-yellow-800' : 
+                                            'bg-gray-100 text-gray-800'}">
+                                            ${p.state}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${p.since}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">${p.info || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function renderBirdRoutes(routes) {
+            return `
+                <div class="space-y-4">
+                    ${routes.map(route => `
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <span class="text-lg font-medium text-gray-900">${route.network}</span>
+                                ${route.primary ? 
+                                    '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">主路由</span>' : 
+                                    ''}
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <p class="text-sm text-gray-500">协议：<span class="font-medium text-gray-900">${route.protocol}</span></p>
+                                    <p class="text-sm text-gray-500">更新时间：<span class="font-medium text-gray-900">${route.since}</span></p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500">度量值：<span class="font-medium text-gray-900">${route.metric || '-'}</span></p>
+                                    <p class="text-sm text-gray-500">AS 路径：<span class="font-medium text-gray-900">${route.as_path || '-'}</span></p>
+                                </div>
+                            </div>
+                            <div class="border-t border-gray-200 pt-4">
+                                <h4 class="text-sm font-medium text-gray-900 mb-2">下一跳信息</h4>
+                                <div class="space-y-2">
+                                    ${route.next_hops.map(hop => `
+                                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                                            <span class="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-700">
+                                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                                </svg>
+                                                ${hop.via}
+                                            </span>
+                                            <span class="text-gray-500">通过</span>
+                                            <span class="font-medium text-gray-900">${hop.interface}</span>
+                                            ${hop.from ? 
+                                                `<span class="text-gray-500">来自</span>
+                                                <span class="font-medium text-gray-900">${hop.from}</span>` : 
+                                                ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderBirdStatus(status) {
+            return `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">基本信息</h3>
+                        <dl class="space-y-2">
+                            <div class="flex justify-between">
+                                <dt class="text-sm font-medium text-gray-500">路由器 ID</dt>
+                                <dd class="text-sm text-gray-900">${status.router_id}</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-sm font-medium text-gray-500">版本</dt>
+                                <dd class="text-sm text-gray-900">${status.version}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">时间信息</h3>
+                        <dl class="space-y-2">
+                            <div class="flex justify-between">
+                                <dt class="text-sm font-medium text-gray-500">服务器时间</dt>
+                                <dd class="text-sm text-gray-900">${status.server_time}</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-sm font-medium text-gray-500">上次重启</dt>
+                                <dd class="text-sm text-gray-900">${status.last_reboot}</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-sm font-medium text-gray-500">上次重新配置</dt>
+                                <dd class="text-sm text-gray-900">${status.last_reconf}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderBirdMemory(memory) {
+            // 计算总内存使用的百分比
+            function calculatePercentage(value) {
+                const match = value.match(/(\d+\.?\d*)\s*([kMGT]?B)/);
+                if (!match) return 0;
+                
+                const num = parseFloat(match[1]);
+                const unit = match[2];
+                let bytes = num;
+                
+                switch(unit) {
+                    case 'kB': bytes *= 1024; break;
+                    case 'MB': bytes *= 1024 * 1024; break;
+                    case 'GB': bytes *= 1024 * 1024 * 1024; break;
+                    case 'TB': bytes *= 1024 * 1024 * 1024 * 1024; break;
+                }
+                return bytes;
+            }
+
+            // 格式化内存大小显示
+            function formatMemorySize(size) {
+                if (!size) return '-';
+                const match = size.match(/(\d+\.?\d*)\s*([kMGT]?B)/);
+                if (!match) return size;
+                return match[1] + ' ' + match[2];
+            }
+
+            // 格式化类别名称
+            function formatCategoryName(name) {
+                return name.split(' ').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+            }
+
+            const totalEffective = calculatePercentage(memory.total.effective);
+            
+            return `
+                <div class="space-y-6">
+                    <!-- 总览 -->
+                    <div class="bg-blue-50 rounded-lg p-6">
+                        <h3 class="text-lg font-medium text-blue-900 mb-4">总内存使用</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-sm font-medium text-blue-800">有效内存</p>
+                                <p class="text-2xl font-bold text-blue-900">${formatMemorySize(memory.total.effective)}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-blue-800">开销</p>
+                                <p class="text-2xl font-bold text-blue-900">${formatMemorySize(memory.total.overhead)}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 详细分类 -->
+                    <div class="bg-white rounded-lg shadow overflow-hidden">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                                        类别
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                                        有效内存
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                                        开销
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                                        占比
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                ${memory.categories.map(category => {
+                                    const effectiveBytes = calculatePercentage(category.usage.effective);
+                                    const percentage = totalEffective ? ((effectiveBytes / totalEffective) * 100).toFixed(1) : 0;
+                                    return `
+                                        <tr>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                ${formatCategoryName(category.name)}
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                ${formatMemorySize(category.usage.effective)}
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                ${formatMemorySize(category.usage.overhead)}
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="flex items-center">
+                                                    <div class="w-24 bg-gray-200 rounded-full h-2.5 mr-2">
+                                                        <div class="bg-blue-600 h-2.5 rounded-full" style="width: ${percentage}%"></div>
+                                                    </div>
+                                                    <span class="text-sm text-gray-500 min-w-[3em]">${percentage}%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function executeBirdCommand(command) {
+            if (isBirdExecuting) return;
+            
+            const outputDiv = document.getElementById('birdOutput');
+            const formattedOutputDiv = document.getElementById('birdFormattedOutput');
+            const statusIndicator = document.getElementById('birdStatusIndicator');
+            
+            try {
+                isBirdExecuting = true;
+                statusIndicator.classList.remove('hidden');
+
+                const response = await fetch('/bird/command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ command }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                lastBirdCommand = result.command;
+                lastBirdData = result.data;
+                
+                // 更新原始输出
+                const timestamp = new Date().toLocaleString();
+                outputDiv.textContent = `=== ${command} (${timestamp}) ===\n${result.raw}\n\n` + outputDiv.textContent;
+                
+                // 更新格式化输出
+                let formattedHtml = '';
+                switch (command) {
+                    case 'show protocols':
+                        formattedHtml = renderBirdProtocols(result.data);
+                        break;
+                    case 'show route':
+                        formattedHtml = renderBirdRoutes(result.data);
+                        break;
+                    case 'show status':
+                        formattedHtml = renderBirdStatus(result.data);
+                        break;
+                    case 'show memory':
+                        formattedHtml = renderBirdMemory(result.data);
+                        break;
+                }
+                formattedOutputDiv.innerHTML = formattedHtml;
+                
+                // 根据显示设置切换视图
+                const showRaw = document.getElementById('showRawOutput').checked;
+                outputDiv.classList.toggle('hidden', !showRaw);
+                formattedOutputDiv.classList.toggle('hidden', showRaw);
+            } catch (error) {
+                console.error('执行命令失败:', error);
+                const errorMessage = `执行命令失败: ${error.message}\n\n` + outputDiv.textContent;
+                outputDiv.textContent = errorMessage;
+                formattedOutputDiv.innerHTML = `<div class="text-red-500">${errorMessage}</div>`;
+            } finally {
+                isBirdExecuting = false;
+                statusIndicator.classList.add('hidden');
+            }
+        }
+
+        function clearBirdOutput() {
+            document.getElementById('birdOutput').textContent = '';
+            document.getElementById('birdFormattedOutput').innerHTML = '';
+        }
+
+        // 监听原始输出显示切换
+        document.getElementById('showRawOutput').addEventListener('change', function(e) {
+            const showRaw = e.target.checked;
+            document.getElementById('birdOutput').classList.toggle('hidden', !showRaw);
+            document.getElementById('birdFormattedOutput').classList.toggle('hidden', showRaw);
+        });
+
+        // 标签页切换
+        function switchTab(tabName) {
+            // 更新标签页按钮样式
+            document.querySelectorAll('.tab-button').forEach(button => {
+                if (button.dataset.tab === tabName) {
+                    button.classList.add('active-tab');
+                } else {
+                    button.classList.remove('active-tab');
+                }
+            });
+
+            // 显示/隐藏内容
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById(`${tabName}-content`).classList.remove('hidden');
+
+            // 如果切换到 Bird2 标签页，自动执行 show protocols 命令
+            if (tabName === 'bird' && document.getElementById('birdOutput').textContent === '') {
+                executeBirdCommand('show protocols');
+            }
+        }
+
+        // 初始化
+        loadInterfaces();
+        // 定期更新 WireGuard 状态
+        setInterval(loadInterfaces, 5000);
+    </script>
+</body>
+</html>
